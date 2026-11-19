@@ -1,0 +1,197 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized teacher/administrator account with write access to classrooms.",
+      "type": "object",
+      "properties": {
+        "role": {
+          "type": "string",
+          "enum": ["admin", "teacher"],
+          "description": "Role of the privileged user."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the admin record was created."
+        }
+      },
+      "required": ["role", "createdAt"]
+    },
+    "Classroom": {
+      "title": "Classroom",
+      "description": "A 3D virtual classroom configuration persisted on the cloud server.",
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "maxLength": 32,
+          "description": "Schema version of the classroom."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Display name of the 3D virtual classroom."
+        },
+        "theme": {
+          "type": "string",
+          "enum": ["pastel_blue", "modern_bright"],
+          "description": "Visual theme preset."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the teacher who owns this classroom."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether students and visitors on any browser/device can view this classroom."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the classroom was created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the last modification."
+        }
+      },
+      "required": ["version", "name", "theme", "ownerId", "isPublic", "createdAt", "updatedAt"]
+    },
+    "FrameItem": {
+      "title": "FrameItem",
+      "description": "An interactive 3D content frame inside a classroom (image, video, embedded game, or digital material).",
+      "type": "object",
+      "properties": {
+        "classroomId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent classroom document ID."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the teacher who owns the classroom."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Mirrors classroom visibility for secure rule-enforced list queries."
+        },
+        "zone": {
+          "type": "string",
+          "enum": ["smartboard", "gallery", "cinema", "games", "materials"],
+          "description": "Classroom zone where the 3D frame is mounted."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["image", "video", "game", "material"],
+          "description": "Type of learning content."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Title of the 3D frame."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 600,
+          "description": "Caption shown on the 3D side plaque next to the frame."
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 750000,
+          "description": "Compressed image data URL or HTTPS URL."
+        },
+        "videoUrl": {
+          "type": "string",
+          "maxLength": 750000,
+          "description": "Direct video URL or compact video data URL."
+        },
+        "videoType": {
+          "type": "string",
+          "enum": ["file", "url"],
+          "description": "Source type of the video."
+        },
+        "embedCode": {
+          "type": "string",
+          "maxLength": 250000,
+          "description": "HTML or iframe embed snippet for interactive educational games."
+        },
+        "materialUrl": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "External URL for digital learning material."
+        },
+        "materialContent": {
+          "type": "string",
+          "maxLength": 50000,
+          "description": "Text notes or lesson instructions."
+        },
+        "position": {
+          "type": "array",
+          "description": "3D coordinates [x, y, z]."
+        },
+        "rotation": {
+          "type": "array",
+          "description": "3D Euler rotation [rx, ry, rz]."
+        },
+        "size": {
+          "type": "array",
+          "description": "2D frame dimensions [width, height]."
+        },
+        "slotIndex": {
+          "type": "number",
+          "description": "Display slot index within the classroom zone."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when created."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when last updated."
+        }
+      },
+      "required": [
+        "classroomId",
+        "ownerId",
+        "isPublic",
+        "zone",
+        "type",
+        "title",
+        "position",
+        "rotation",
+        "size",
+        "slotIndex",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Authoritative list of teacher/admin UIDs with write privileges."
+    },
+    "/classrooms/{classroomId}": {
+      "schema": { "$ref": "#/entities/Classroom" },
+      "description": "3D virtual classroom root documents."
+    },
+    "/classrooms/{classroomId}/frames/{frameId}": {
+      "schema": { "$ref": "#/entities/FrameItem" },
+      "description": "Individual 3D content frames belonging to a classroom."
+    }
+  }
+}

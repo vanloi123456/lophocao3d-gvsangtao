@@ -1,0 +1,183 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // GLOBAL SAFETY NET (Default Deny)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // GLOBAL PRIMITIVES
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isMainClassroom(classroomId) {
+      return classroomId == 'main-classroom';
+    }
+
+    // =========================================================================
+    // ENTITY VALIDATION BLUEPRINTS
+    // =========================================================================
+    function isValidClassroom(data) {
+      return data.keys().hasAll(['version', 'name', 'theme', 'ownerId', 'isPublic', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['version', 'name', 'theme', 'ownerId', 'isPublic', 'createdAt', 'updatedAt']) &&
+        data.version is string && data.version.size() >= 1 && data.version.size() <= 32 &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 160 &&
+        data.theme is string && data.theme in ['pastel_blue', 'modern_bright'] &&
+        isValidId(data.ownerId) &&
+        data.isPublic == true &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidVec3(arr) {
+      return arr is list &&
+        arr.size() == 3 &&
+        arr[0] is number &&
+        arr[1] is number &&
+        arr[2] is number;
+    }
+
+    function isValidVec2(arr) {
+      return arr is list &&
+        arr.size() == 2 &&
+        arr[0] is number && arr[0] >= 0.5 && arr[0] <= 12.0 &&
+        arr[1] is number && arr[1] >= 0.5 && arr[1] <= 8.0;
+    }
+
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
+    }
+
+    function isValidFrame(data, classroomId) {
+      return data.keys().hasAll([
+          'classroomId', 'ownerId', 'isPublic', 'zone', 'type', 'title',
+          'position', 'rotation', 'size', 'slotIndex', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'classroomId', 'ownerId', 'isPublic', 'zone', 'type', 'title',
+          'description', 'imageUrl', 'videoUrl', 'videoType', 'embedCode',
+          'materialUrl', 'materialContent', 'position', 'rotation', 'size',
+          'slotIndex', 'createdAt', 'updatedAt'
+        ]) &&
+        isValidId(data.classroomId) && data.classroomId == classroomId &&
+        isValidId(data.ownerId) &&
+        data.isPublic == true &&
+        data.zone is string && data.zone in ['smartboard', 'gallery', 'cinema', 'games', 'materials'] &&
+        data.type is string && data.type in ['image', 'video', 'game', 'material'] &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 160 &&
+        isValidOptionalString(data, 'description', 600) &&
+        isValidOptionalString(data, 'imageUrl', 750000) &&
+        isValidOptionalString(data, 'videoUrl', 750000) &&
+        (!('videoType' in data) || (data.videoType is string && data.videoType in ['file', 'url'])) &&
+        isValidOptionalString(data, 'embedCode', 250000) &&
+        isValidOptionalString(data, 'materialUrl', 2048) &&
+        isValidOptionalString(data, 'materialContent', 50000) &&
+        isValidVec3(data.position) &&
+        isValidVec3(data.rotation) &&
+        isValidVec2(data.size) &&
+        data.slotIndex is number && data.slotIndex >= 0 && data.slotIndex <= 1000 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // COLLECTION: /admins/{adminId} (Locked — No Login Mode)
+    // =========================================================================
+    match /admins/{adminId} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // COLLECTION: /classrooms/{classroomId}
+    // Note: User explicitly requested no-login cross-device server persistence.
+    // Scoped strictly to 'main-classroom' with full schema, bounds, and server-time checks.
+    // =========================================================================
+    match /classrooms/{classroomId} {
+      allow get: if isValidId(classroomId) && isMainClassroom(classroomId) && (
+        resource == null || existing().isPublic == true
+      );
+
+      allow list: if existing().isPublic == true;
+
+      allow create: if isValidId(classroomId) &&
+        isMainClassroom(classroomId) &&
+        isValidClassroom(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(classroomId) &&
+        isMainClassroom(classroomId) &&
+        isValidClassroom(incoming()) &&
+        incoming().ownerId == existing().ownerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['version', 'name', 'theme', 'isPublic', 'updatedAt']);
+
+      allow delete: if false;
+
+      // =======================================================================
+      // SUBCOLLECTION: /classrooms/{classroomId}/frames/{frameId}
+      // =======================================================================
+      match /frames/{frameId} {
+        function parentClassroomExists() {
+          return exists(/databases/$(database)/documents/classrooms/$(classroomId));
+        }
+
+        function parentClassroom() {
+          return get(/databases/$(database)/documents/classrooms/$(classroomId)).data;
+        }
+
+        allow get: if isValidId(classroomId) && isValidId(frameId) && isMainClassroom(classroomId) && (
+          resource == null || existing().isPublic == true
+        );
+
+        allow list: if existing().isPublic == true;
+
+        allow create: if isValidId(classroomId) &&
+          isValidId(frameId) &&
+          isMainClassroom(classroomId) &&
+          isValidFrame(incoming(), classroomId) &&
+          incoming().createdAt == request.time &&
+          incoming().updatedAt == request.time &&
+          parentClassroomExists() &&
+          incoming().ownerId == parentClassroom().ownerId;
+
+        allow update: if isValidId(classroomId) &&
+          isValidId(frameId) &&
+          isMainClassroom(classroomId) &&
+          isValidFrame(incoming(), classroomId) &&
+          incoming().classroomId == existing().classroomId &&
+          incoming().ownerId == existing().ownerId &&
+          incoming().createdAt == existing().createdAt &&
+          incoming().updatedAt == request.time &&
+          parentClassroomExists() &&
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'zone', 'type', 'title', 'description',
+            'imageUrl', 'videoUrl', 'videoType', 'embedCode',
+            'materialUrl', 'materialContent',
+            'position', 'rotation', 'size', 'slotIndex', 'updatedAt'
+          ]);
+
+        allow delete: if isValidId(classroomId) &&
+          isValidId(frameId) &&
+          isMainClassroom(classroomId) &&
+          parentClassroomExists();
+      }
+    }
+  }
+}
